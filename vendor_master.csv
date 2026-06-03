@@ -1,0 +1,28 @@
+Vendor_Name,Vendor_ID,Date_Added,Added_By,Dept_ID,Status,W9_On_File,Contract_On_File
+Allied Office Supplies,V-2022-3391,2018-12-01,Marcus Webb,OPS,Active,True,True
+Cornerstone Maintenance,V-2019-8444,2021-07-01,Marcus Webb,OPS,Active,True,True
+ProEquip Rentals,V-2022-1993,2020-02-01,Marcus Webb,OPS,Active,True,True
+Delta Logistics Co,V-2018-5132,2020-07-01,Marcus Webb,OPS,Active,True,True
+Spartan Courier Services,V-2021-2350,2020-04-01,Marcus Webb,OPS,Active,True,True
+Workforce Dynamics LLC,V-2022-1365,2021-01-01,Sandra Okonkwo,HR,Active,True,True
+BenefitBridge Inc,V-2018-6233,2021-07-01,Sandra Okonkwo,HR,Active,True,True
+TalentFirst Solutions,V-2020-7110,2021-04-01,Sandra Okonkwo,HR,Active,True,True
+TechCore Systems,V-2021-1309,2018-05-01,Derek Palomino,IT,Active,True,True
+CloudNine Infrastructure,V-2018-6808,2019-06-01,Derek Palomino,IT,Active,True,True
+SecureNet Consulting,V-2021-4971,2021-02-01,Derek Palomino,IT,Active,True,True
+Apex Audit Partners,V-2018-5492,2019-12-01,Claire Hutchinson,FIN,Active,True,True
+RegCo Compliance,V-2021-2148,2021-05-01,Claire Hutchinson,FIN,Active,True,True
+FinData Services,V-2019-2397,2018-10-01,Claire Hutchinson,FIN,Active,True,True
+SalesForce Pro,V-2018-2451,2020-02-01,Tony Restrepo,SAL,Active,True,True
+LeadGen Dynamics,V-2022-7073,2021-03-01,Tony Restrepo,SAL,Active,True,True
+ClientEdge Analytics,V-2018-6500,2018-11-01,Tony Restrepo,SAL,Active,True,True
+BrandWave Agency,V-2020-2257,2021-06-01,Priya Nair,MKT,Active,True,True
+MediaPulse Creative,V-2019-2774,2018-11-01,Priya Nair,MKT,Active,True,True
+DataReach Marketing,V-2022-2770,2021-12-01,Priya Nair,MKT,Active,True,True
+Meridian Legal Counsel,V-2018-7852,2022-11-01,James Whitfield,LEG,Active,True,True
+ComplianceFirst LLP,V-2018-4199,2020-08-01,James Whitfield,LEG,Active,True,True
+RiskGuard Associates,V-2018-5900,2018-01-01,James Whitfield,LEG,Active,True,True
+CityView Property Mgmt,V-2021-7284,2019-04-01,Rosa Delgado,FAC,Active,True,True
+Greenfield Landscaping,V-2020-8444,2019-04-01,Rosa Delgado,FAC,Active,True,True
+BuildRight Contractors,V-2018-1131,2021-01-01,Rosa Delgado,FAC,Active,True,True
+Apex Facility Services LLC,V-2023-0891,2023-01-15,Marcus Webb,OPS,Active,False,False

@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget Anomaly Investigation — Meridian Solutions Group</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0b0e14;
+    --panel:     #111520;
+    --panel2:    #161b28;
+    --border:    #1e2840;
+    --red:       #e53935;
+    --red-dim:   rgba(229,57,53,0.15);
+    --red-glow:  rgba(229,57,53,0.4);
+    --amber:     #ffb300;
+    --amber-dim: rgba(255,179,0,0.12);
+    --blue:      #42a5f5;
+    --blue-dim:  rgba(66,165,245,0.12);
+    --green:     #66bb6a;
+    --green-dim: rgba(102,187,106,0.12);
+    --text:      #e8ecf4;
+    --muted:     #7a8499;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .threat-badge {
+    background: var(--red);
+    color: white;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    padding: 4px 10px;
+    border-radius: 2px;
+    animation: pulse-badge 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+  }
+
+  .header-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.04em;
+  }
+
+  .header-title span { color: var(--muted); font-weight: 400; }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .header-right .live { color: var(--red); }
+
+  /* ── KPI ROW ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .kpi {
+    background: var(--panel);
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s;
+  }
+
+  .kpi::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .kpi.critical::before { background: var(--red); }
+  .kpi.warning::before  { background: var(--amber); }
+  .kpi.info::before     { background: var(--blue); }
+  .kpi.ok::before       { background: var(--green); }
+
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .kpi.critical .kpi-value { color: var(--red); }
+  .kpi.warning  .kpi-value { color: var(--amber); }
+  .kpi.info     .kpi-value { color: var(--blue); }
+  .kpi.ok       .kpi-value { color: var(--green); }
+
+  .kpi-sub {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── MAIN GRID ── */
+  .main {
+    padding: 24px 32px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .panel.full-width {
+    grid-column: 1 / -1;
+  }
+
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel2);
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .panel-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .panel-body {
+    padding: 20px;
+    position: relative;
+  }
+
+  canvas {
+    max-height: 280px;
+  }
+
+  /* ── DEPT BAR TABLE ── */
+  .dept-bars { padding: 16px 20px; }
+
+  .dept-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 70px;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dept-row:last-child { border-bottom: none; }
+
+  .dept-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dept-row.flagged .dept-name { color: var(--red); font-weight: 600; }
+
+  .bar-track {
+    height: 8px;
+    background: var(--panel2);
+    border-radius: 2px;
+    overflow: visible;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .dept-pct {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-align: right;
+  }
+
+  .dept-row.flagged .dept-pct { color: var(--red); }
+
+  /* ── INVOICE TABLE ── */
+  .inv-table { font-family: var(--mono); font-size: 11px; }
+
+  .inv-header {
+    display: grid;
+    grid-template-columns: 100px 80px 80px 1fr;
+    gap: 12px;
+    padding: 10px 20px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .inv-scroll {
+    max-height: 260px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .inv-row {
+    display: grid;
+    grid-template-columns: 100px 80px 80px 1fr;
+    gap: 12px;
+    padding: 8px 20px;
+    border-bottom: 1px solid rgba(30,40,64,0.5);
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .inv-row:hover { background: var(--red-dim); }
+
+  .inv-amount { color: var(--red); font-weight: 600; }
+  .inv-flag   { color: var(--amber); font-size: 10px; }
+
+  /* ── FRAUD INDICATORS ── */
+  .indicators { padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+
+  .indicator {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 3px;
+    border-left: 3px solid;
+    background: var(--panel2);
+  }
+
+  .indicator.critical { border-color: var(--red); background: var(--red-dim); }
+  .indicator.high     { border-color: var(--amber); background: var(--amber-dim); }
+  .indicator.medium   { border-color: var(--blue); background: var(--blue-dim); }
+
+  .ind-sev {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 2px 6px;
+    border-radius: 2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .indicator.critical .ind-sev { background: var(--red); color: white; }
+  .indicator.high     .ind-sev { background: var(--amber); color: #000; }
+  .indicator.medium   .ind-sev { background: var(--blue); color: #000; }
+
+  .ind-text { font-size: 12px; color: var(--text); }
+  .ind-evidence { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* ── RECOMMENDATION BOX ── */
+  .recommendation {
+    margin: 0 32px 24px;
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .rec-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+
+  .rec-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--red);
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+
+  .rec-body { font-size: 13px; color: var(--text); }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 12px 32px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* ── ANNOTATION ── */
+  .annotation {
+    position: absolute;
+    background: var(--amber);
+    color: #000;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 2px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* ── TOOLTIP ── */
+  .tooltip-box {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+
+  .threshold-line {
+    width: 100%;
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--amber);
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <div class="threat-badge">⚠ CONFIDENTIAL</div>
+    <div class="header-title">
+      MERIDIAN SOLUTIONS GROUP — <span>Budget Anomaly Investigation Dashboard</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span>ANALYST: A. MOLINA</span>
+    <span>CASE: BDG-2024-003</span>
+    <span class="live">● INVESTIGATION ACTIVE</span>
+    <span>MARCH 1, 2024</span>
+  </div>
+</header>
+
+<!-- KPI ROW -->
+<div class="kpi-row">
+  <div class="kpi critical">
+    <div class="kpi-label">Total Exposure</div>
+    <div class="kpi-value">$345K</div>
+    <div class="kpi-sub">$345,637.32 total</div>
+  </div>
+  <div class="kpi critical">
+    <div class="kpi-label">Ghost Invoices</div>
+    <div class="kpi-value">38</div>
+    <div class="kpi-sub">Jan 2023 – Feb 2024</div>
+  </div>
+  <div class="kpi warning">
+    <div class="kpi-label">Avg Invoice</div>
+    <div class="kpi-value">$9,096</div>
+    <div class="kpi-sub">All below $10K threshold</div>
+  </div>
+  <div class="kpi warning">
+    <div class="kpi-label">Avg Variance</div>
+    <div class="kpi-value">+23.4%</div>
+    <div class="kpi-sub">Operations Dept</div>
+  </div>
+  <div class="kpi info">
+    <div class="kpi-label">Months Active</div>
+    <div class="kpi-value">14</div>
+    <div class="kpi-sub">Before detection</div>
+  </div>
+</div>
+
+<!-- MAIN GRID -->
+<div class="main">
+
+  <!-- PANEL 1: Budget vs Actual Timeline (full width) -->
+  <div class="panel full-width">
+    <div class="panel-header">
+      <div class="panel-title">Operations Dept — Budget vs Actual (Jan 2022 – Feb 2024)</div>
+      <div class="panel-meta">Ghost vendor added Jan 2023 ↑  |  Red shading = unexplained overspend</div>
+    </div>
+    <div class="panel-body">
+      <canvas id="timelineChart"></canvas>
+    </div>
+  </div>
+
+  <!-- PANEL 2: Department variance bars -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Avg Variance by Department (Full Period)</div>
+      <div class="panel-meta">Operations is the only dept over budget</div>
+    </div>
+    <div class="dept-bars" id="deptBars"></div>
+  </div>
+
+  <!-- PANEL 3: Cumulative exposure -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Apex Facility Services LLC — Cumulative Exposure</div>
+      <div class="panel-meta">$345,637 over 14 months</div>
+    </div>
+    <div class="panel-body">
+      <canvas id="cumulativeChart"></canvas>
+    </div>
+  </div>
+
+  <!-- PANEL 4: Invoice clustering -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Invoice Structuring — All 38 Invoices vs $10K Threshold</div>
+      <div class="panel-meta">Classic threshold avoidance pattern</div>
+    </div>
+    <div class="panel-body">
+      <canvas id="scatterChart"></canvas>
+      <div class="threshold-line">— $10,000 dual-approval threshold</div>
+    </div>
+  </div>
+
+  <!-- PANEL 5: Invoice log -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Flagged Transaction Log — Apex Facility Services LLC</div>
+      <div class="panel-meta">Scroll to view all 38 invoices</div>
+    </div>
+    <div class="inv-table">
+      <div class="inv-header">
+        <span>Date</span>
+        <span>Invoice</span>
+        <span>Amount</span>
+        <span>Flag</span>
+      </div>
+      <div class="inv-scroll" id="invoiceLog"></div>
+    </div>
+  </div>
+
+  <!-- PANEL 6: Fraud indicators -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Fraud Indicator Scorecard — ACFE Framework</div>
+      <div class="panel-meta">10 of 10 red flags present</div>
+    </div>
+    <div class="indicators" id="indicators"></div>
+  </div>
+
+</div>
+
+<!-- RECOMMENDATION -->
+<div class="recommendation">
+  <div class="rec-icon">⚠</div>
+  <div>
+    <div class="rec-title">IMMEDIATE ACTION REQUIRED</div>
+    <div class="rec-body">
+      Freeze Apex Facility Services LLC in payment system. Preserve Marcus Webb's system access logs and approval records.
+      Notify HR and Legal within 24 hours. Pattern is consistent with a fictitious vendor scheme — asset misappropriation
+      via invoice structuring. Estimated exposure: <strong>$345,637</strong> over 14 months.
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <span>Meridian Solutions Group — Internal Investigation Report  |  Case BDG-2024-003  |  CONFIDENTIAL</span>
+  <span>Analyst: Alejandro Molina  |  github.com/chooseyourtacoday  |  All data is synthetic — for portfolio purposes only</span>
+</footer>
+
+<script>
+// ── DATA ───────────────────────────────────────────────────────────────────
+const OPS = [
+  {m:"Jan 2022",b:85000,a:78772,v:-7.33},{m:"Feb 2022",b:85000,a:82014,v:-3.51},
+  {m:"Mar 2022",b:85000,a:73996,v:-12.95},{m:"Apr 2022",b:85000,a:79189,v:-6.84},
+  {m:"May 2022",b:85000,a:81727,v:-3.85},{m:"Jun 2022",b:85000,a:74192,v:-12.72},
+  {m:"Jul 2022",b:85000,a:82134,v:-3.37},{m:"Aug 2022",b:85000,a:81726,v:-3.85},
+  {m:"Sep 2022",b:85000,a:79823,v:-6.09},{m:"Oct 2022",b:85000,a:75394,v:-11.3},
+  {m:"Nov 2022",b:85000,a:76701,v:-9.76},{m:"Dec 2022",b:85000,a:77464,v:-8.87},
+  {m:"Jan 2023",b:85000,a:102509,v:20.6},{m:"Feb 2023",b:85000,a:106342,v:25.11},
+  {m:"Mar 2023",b:85000,a:91621,v:7.79},{m:"Apr 2023",b:85000,a:108340,v:27.46},
+  {m:"May 2023",b:85000,a:102112,v:20.13},{m:"Jun 2023",b:85000,a:100257,v:17.95},
+  {m:"Jul 2023",b:85000,a:105171,v:23.73},{m:"Aug 2023",b:85000,a:98725,v:16.15},
+  {m:"Sep 2023",b:85000,a:105854,v:24.53},{m:"Oct 2023",b:85000,a:103311,v:21.54},
+  {m:"Nov 2023",b:85000,a:105969,v:24.67},{m:"Dec 2023",b:85000,a:95999,v:12.94},
+  {m:"Jan 2024",b:85000,a:108808,v:28.01},{m:"Feb 2024",b:85000,a:93791,v:10.34}
+];
+
+const DEPTS = [
+  {d:"Operations",v:7.33,flagged:true},
+  {d:"Marketing",v:-7.61},{d:"Info Tech",v:-8.33},
+  {d:"Facilities",v:-9.02},{d:"Sales",v:-9.48},
+  {d:"Finance",v:-9.49},{d:"Human Resources",v:-10.0},
+  {d:"Legal",v:-10.09}
+];
+
+const APEX_MONTHLY = [
+  {m:"Jan 2023",t:27431,c:27431},{m:"Feb 2023",t:28055,c:55486},
+  {m:"Mar 2023",t:18596,c:74082},{m:"Apr 2023",t:27952,c:102034},
+  {m:"May 2023",t:26644,c:128678},{m:"Jun 2023",t:25705,c:154383},
+  {m:"Jul 2023",t:26851,c:181234},{m:"Aug 2023",t:17653,c:198887},
+  {m:"Sep 2023",t:28610,c:227498},{m:"Oct 2023",t:26879,c:254377},
+  {m:"Nov 2023",t:26918,c:281294},{m:"Dec 2023",t:18334,c:299629},
+  {m:"Jan 2024",t:27282,c:326911},{m:"Feb 2024",t:18727,c:345637}
+];
+
+const APEX_INVOICES = [
+  {d:"2023-01-14",i:"APX-4077",a:9569.09},{d:"2023-01-18",i:"APX-1493",a:8782.94},
+  {d:"2023-01-26",i:"APX-7843",a:9078.87},{d:"2023-02-04",i:"APX-9188",a:9773.53},
+  {d:"2023-02-08",i:"APX-6006",a:8687.58},{d:"2023-02-15",i:"APX-6567",a:9594.04},
+  {d:"2023-03-25",i:"APX-7608",a:9065.85},{d:"2023-03-26",i:"APX-9808",a:9529.84},
+  {d:"2023-04-04",i:"APX-1527",a:8940.21},{d:"2023-04-08",i:"APX-6410",a:9744.89},
+  {d:"2023-04-23",i:"APX-7404",a:9267.06},{d:"2023-05-10",i:"APX-8778",a:9221.56},
+  {d:"2023-05-16",i:"APX-2043",a:8775.68},{d:"2023-05-22",i:"APX-8397",a:8646.66},
+  {d:"2023-06-07",i:"APX-3910",a:8625.88},{d:"2023-06-10",i:"APX-2138",a:8536.23},
+  {d:"2023-06-26",i:"APX-9005",a:8543.28},{d:"2023-07-06",i:"APX-8449",a:9390.42},
+  {d:"2023-07-11",i:"APX-5769",a:8883.15},{d:"2023-07-20",i:"APX-1180",a:8577.56},
+  {d:"2023-08-07",i:"APX-3115",a:8712.00},{d:"2023-08-17",i:"APX-7407",a:8941.14},
+  {d:"2023-09-06",i:"APX-7373",a:9145.64},{d:"2023-09-10",i:"APX-3128",a:9789.38},
+  {d:"2023-09-13",i:"APX-8081",a:9675.11},{d:"2023-10-04",i:"APX-3337",a:8871.85},
+  {d:"2023-10-20",i:"APX-8519",a:9293.11},{d:"2023-10-22",i:"APX-6084",a:8714.35},
+  {d:"2023-11-16",i:"APX-5044",a:8586.36},{d:"2023-11-22",i:"APX-9043",a:9209.91},
+  {d:"2023-11-22",i:"APX-1640",a:9121.28},{d:"2023-12-18",i:"APX-6681",a:8888.68},
+  {d:"2023-12-26",i:"APX-5873",a:9445.43},{d:"2024-01-09",i:"APX-7800",a:9327.59},
+  {d:"2024-01-23",i:"APX-8079",a:8836.33},{d:"2024-01-25",i:"APX-4005",a:9118.07},
+  {d:"2024-02-05",i:"APX-4927",a:9031.29},{d:"2024-02-09",i:"APX-5485",a:9695.48}
+];
+
+const INDICATORS = [
+  {sev:"critical",t:"Invoice structuring below $10K threshold",e:"All 38 invoices: $8,536–$9,789 (threshold: $10,000)"},
+  {sev:"critical",t:"Vendor added & approved by same employee",e:"Marcus Webb: vendor creator + sole approver for all OPS invoices"},
+  {sev:"critical",t:"No W-9 documentation on file",e:"Only vendor in system without W-9 — IRS required for payments >$600/yr"},
+  {sev:"high",t:"No service contract on file",e:"14 months of recurring invoices with no contract documentation"},
+  {sev:"high",t:"Anomaly begins at specific date and persists",e:"Variance starts Jan 2023 — exact month vendor was added to system"},
+  {sev:"high",t:"Vendor spend = 46% of total OPS budget in period",e:"Disproportionate concentration in single unverified vendor"},
+  {sev:"medium",t:"Vague invoice descriptions",e:"All 38 invoices: \"Facility maintenance services\" — no detail or work orders"},
+  {sev:"medium",t:"Single approval chain — no independent oversight",e:"Control gap: transactions <$10K require only 1 approver"},
+  {sev:"medium",t:"Variance exceeds 20% investigation threshold",e:"Average +23.4% monthly overspend (trigger: 20%)"},
+  {sev:"medium",t:"No verifiable business address or registration",e:"Entity cannot be verified through public business registry"},
+];
+
+// ── CHART.JS DEFAULTS ──────────────────────────────────────────────────────
+Chart.defaults.color = '#7a8499';
+Chart.defaults.borderColor = '#1e2840';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+
+const tooltipStyle = {
+  backgroundColor: '#161b28',
+  borderColor: '#1e2840',
+  borderWidth: 1,
+  titleColor: '#e8ecf4',
+  bodyColor: '#b0b8cc',
+  padding: 10,
+  cornerRadius: 3,
+  titleFont: { family: "'IBM Plex Mono', monospace", size: 11, weight: '600' },
+  bodyFont: { family: "'IBM Plex Mono', monospace", size: 10 },
+};
+
+// ── CHART 1: TIMELINE ─────────────────────────────────────────────────────
+const tlCtx = document.getElementById('timelineChart').getContext('2d');
+
+// Create gradient for over-budget area
+const overGrad = tlCtx.createLinearGradient(0, 0, 0, 300);
+overGrad.addColorStop(0, 'rgba(229,57,53,0.3)');
+overGrad.addColorStop(1, 'rgba(229,57,53,0.02)');
+
+new Chart(tlCtx, {
+  type: 'line',
+  data: {
+    labels: OPS.map(d => d.m),
+    datasets: [
+      {
+        label: 'Actual Spend',
+        data: OPS.map(d => d.a),
+        borderColor: '#e53935',
+        backgroundColor: overGrad,
+        borderWidth: 2,
+        fill: '+1',
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        pointBackgroundColor: d => d.raw > 85000 ? '#e53935' : '#42a5f5',
+      },
+      {
+        label: 'Approved Budget',
+        data: OPS.map(d => d.b),
+        borderColor: '#42a5f5',
+        borderWidth: 2,
+        borderDash: [6, 3],
+        fill: false,
+        tension: 0,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, pointStyleWidth: 12 } },
+      tooltip: {
+        ...tooltipStyle,
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString()}`,
+          afterLabel: (ctx) => {
+            if (ctx.datasetIndex === 0) {
+              const v = OPS[ctx.dataIndex].v;
+              return ` Variance: ${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
+            }
+          }
+        }
+      },
+      annotation: {}
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(30,40,64,0.5)' },
+        ticks: { maxRotation: 45, font: { size: 9 } }
+      },
+      y: {
+        grid: { color: 'rgba(30,40,64,0.5)' },
+        ticks: { callback: v => `$${(v/1000).toFixed(0)}K` }
+      }
+    }
+  }
+});
+
+// Jan 2023 annotation line
+const jan2023Idx = OPS.findIndex(d => d.m === 'Jan 2023');
+// (annotation plugin not loaded — we'll use CSS overlay approach)
+
+// ── CHART 2: CUMULATIVE ───────────────────────────────────────────────────
+const cumGrad = document.getElementById('cumulativeChart').getContext('2d');
+const cumAreaGrad = cumGrad.createLinearGradient(0, 0, 0, 280);
+cumAreaGrad.addColorStop(0, 'rgba(229,57,53,0.25)');
+cumAreaGrad.addColorStop(1, 'rgba(229,57,53,0.02)');
+
+new Chart(cumGrad, {
+  type: 'bar',
+  data: {
+    labels: APEX_MONTHLY.map(d => d.m),
+    datasets: [
+      {
+        label: 'Monthly ($)',
+        data: APEX_MONTHLY.map(d => d.t),
+        backgroundColor: 'rgba(229,57,53,0.5)',
+        borderColor: '#e53935',
+        borderWidth: 1,
+        yAxisID: 'y',
+        order: 2,
+      },
+      {
+        label: 'Cumulative ($)',
+        data: APEX_MONTHLY.map(d => d.c),
+        type: 'line',
+        borderColor: '#ffb300',
+        backgroundColor: cumAreaGrad,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        yAxisID: 'y2',
+        order: 1,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, pointStyleWidth: 12 } },
+      tooltip: {
+        ...tooltipStyle,
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: $${Math.round(ctx.raw).toLocaleString()}`
+        }
+      }
+    },
+    scales: {
+      x: { grid: { color: 'rgba(30,40,64,0.5)' }, ticks: { font: { size: 9 } } },
+      y: {
+        grid: { color: 'rgba(30,40,64,0.5)' },
+        ticks: { callback: v => `$${(v/1000).toFixed(0)}K` },
+        title: { display: true, text: 'Monthly', color: '#e53935', font: { size: 9 } }
+      },
+      y2: {
+        position: 'right',
+        grid: { drawOnChartArea: false },
+        ticks: { callback: v => `$${(v/1000).toFixed(0)}K` },
+        title: { display: true, text: 'Cumulative', color: '#ffb300', font: { size: 9 } }
+      }
+    }
+  }
+});
+
+// ── CHART 3: SCATTER ──────────────────────────────────────────────────────
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      {
+        label: 'Apex Invoice Amount',
+        data: APEX_INVOICES.map((inv, i) => ({ x: i + 1, y: inv.a, inv: inv.i, date: inv.d })),
+        backgroundColor: 'rgba(229,57,53,0.7)',
+        borderColor: '#e53935',
+        borderWidth: 1,
+        pointRadius: 7,
+        pointHoverRadius: 10,
+      },
+      {
+        label: '$10,000 Approval Threshold',
+        data: [{x: 0, y: 10000}, {x: 39, y: 10000}],
+        type: 'line',
+        borderColor: '#ffb300',
+        borderWidth: 2,
+        borderDash: [6,3],
+        pointRadius: 0,
+        fill: false,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, pointStyleWidth: 12 } },
+      tooltip: {
+        ...tooltipStyle,
+        callbacks: {
+          label: ctx => {
+            if (ctx.datasetIndex === 0) {
+              return [
+                ` Invoice: ${ctx.raw.inv}`,
+                ` Date: ${ctx.raw.date}`,
+                ` Amount: $${ctx.raw.y.toLocaleString('en-US', {minimumFractionDigits:2})}`,
+                ` Gap to threshold: $${(10000 - ctx.raw.y).toFixed(2)}`
+              ];
+            }
+            return ' Approval threshold: $10,000';
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(30,40,64,0.5)' },
+        title: { display: true, text: 'Invoice # (chronological)', color: '#7a8499', font: { size: 10 } },
+        min: 0, max: 39
+      },
+      y: {
+        grid: { color: 'rgba(30,40,64,0.5)' },
+        min: 8000, max: 10500,
+        ticks: { callback: v => `$${v.toLocaleString()}` },
+        title: { display: true, text: 'Amount ($)', color: '#7a8499', font: { size: 10 } }
+      }
+    }
+  }
+});
+
+// ── DEPT BARS ─────────────────────────────────────────────────────────────
+const deptContainer = document.getElementById('deptBars');
+const maxAbs = Math.max(...DEPTS.map(d => Math.abs(d.v)));
+
+DEPTS.forEach(dept => {
+  const pct = Math.abs(dept.v) / maxAbs * 100;
+  const isPos = dept.v > 0;
+  const color = dept.flagged ? '#e53935' : (isPos ? '#ffb300' : '#42a5f5');
+  const row = document.createElement('div');
+  row.className = 'dept-row' + (dept.flagged ? ' flagged' : '');
+  row.innerHTML = `
+    <div class="dept-name">${dept.d}</div>
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${pct}%;background:${color};opacity:${dept.flagged?1:0.6}"></div>
+    </div>
+    <div class="dept-pct" style="color:${color}">${dept.v > 0 ? '+' : ''}${dept.v.toFixed(1)}%</div>
+  `;
+  deptContainer.appendChild(row);
+});
+
+// ── INVOICE LOG ───────────────────────────────────────────────────────────
+const logContainer = document.getElementById('invoiceLog');
+APEX_INVOICES.forEach((inv, i) => {
+  const gap = (10000 - inv.a).toFixed(2);
+  const row = document.createElement('div');
+  row.className = 'inv-row';
+  row.style.animationDelay = `${i * 0.02}s`;
+  row.innerHTML = `
+    <span>${inv.d}</span>
+    <span>${inv.i}</span>
+    <span class="inv-amount">$${inv.a.toLocaleString('en-US',{minimumFractionDigits:2})}</span>
+    <span class="inv-flag">$${gap} below threshold</span>
+  `;
+  logContainer.appendChild(row);
+});
+
+// ── INDICATORS ────────────────────────────────────────────────────────────
+const indContainer = document.getElementById('indicators');
+INDICATORS.forEach(ind => {
+  const el = document.createElement('div');
+  el.className = `indicator ${ind.sev}`;
+  el.innerHTML = `
+    <div class="ind-sev">${ind.sev.toUpperCase()}</div>
+    <div>
+      <div class="ind-text">${ind.t}</div>
+      <div class="ind-evidence">${ind.e}</div>
+    </div>
+  `;
+  indContainer.appendChild(el);
+});
+</script>
+</body>
+</html>
